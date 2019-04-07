@@ -1262,6 +1262,10 @@ func buildSidecarInboundMgmtListeners(node *model.Proxy, env *model.Environment,
 
 	if managementIP == "" {
 		managementIP = "127.0.0.1"
+		addr := net.ParseIP(node.IPAddresses[0])
+		if addr != nil && addr.To4() == nil {
+			managementIP = "::1"
+		}
 	}
 
 	// NOTE: We should not generate inbound listeners when the proxy does not have any IPtables traffic capture
