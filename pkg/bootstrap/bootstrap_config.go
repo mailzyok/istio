@@ -274,6 +274,10 @@ func WriteBootstrap(config *meshconfig.ProxyConfig, node string, epoch int, pilo
 
 	// Pass unmodified config.DiscoveryAddress for Google gRPC Envoy client target_uri parameter
 	opts["discovery_address"] = config.DiscoveryAddress
+	// Check if nodeIP carries IPv4 or IPv6 and set up proxy accordingly
+	if isIPv6Addr(nodeIPs[0]) {
+		opts["ipv6_proxy"] = "true"
+	}
 
 	if config.Tracing != nil {
 		switch tracer := config.Tracing.Tracer.(type) {
@@ -331,8 +335,23 @@ func WriteBootstrap(config *meshconfig.ProxyConfig, node string, epoch int, pilo
 	if err != nil {
 		return "", err
 	}
-
 	// Execute needs some sort of io.Writer
 	err = t.Execute(fout, opts)
 	return fname, err
+}
+
+// isIPv6Addr check the string and returns true for a valid IPv6 address
+// for all other cases it returns false
+func isIPv6Addr(proxyAddr string) bool {
+	addr := net.ParseIP(proxyAddr)
+	if addr != nil && addr.To4() != nil {
+		// Valid IPv4 address
+		return false
+	} else if addr != nil && addr.To4() == nil {
+		// Valid IPv6 address
+		return true
+	} else {
+		// In any other cases return as it were IPv4
+		return false
+	}
 }
