@@ -142,7 +142,9 @@ var (
 				role.IPAddresses = append(role.IPAddresses, "127.0.0.1")
 				role.IPAddresses = append(role.IPAddresses, "::1")
 			}
-
+			// Check if proxy runs in ipv4 or ipv6 environment to set Envoy's
+			// operational parameters correctly.
+			proxyIPv6 := isIPv6Addr(role.IPAddresses[0])
 			if len(role.ID) == 0 {
 				if registry == serviceregistry.KubernetesRegistry {
 					role.ID = podNameVar.Get() + "." + podNamespaceVar.Get()
@@ -310,7 +312,9 @@ var (
 					opts := make(map[string]string)
 					opts["PodName"] = podNameVar.Get()
 					opts["PodNamespace"] = podNamespaceVar.Get()
-
+					if proxyIPv6 {
+						opts["IPv6Proxy"] = "true"
+					}
 					mixerSAN := getSAN(ns, envoy.MixerSvcAccName, role.MixerIdentity)
 					log.Infof("MixerSAN %#v", mixerSAN)
 					if len(mixerSAN) > 1 {
@@ -359,9 +363,13 @@ var (
 				if err != nil {
 					return err
 				}
-
+				localHostAddr := "127.0.0.1"
+				if proxyIPv6 {
+					localHostAddr = "[::1]"
+				}
 				prober := kubeAppProberNameVar.Get()
 				statusServer, err := status.NewServer(status.Config{
+					LocalHostAddr:      localHostAddr,
 					AdminPort:          proxyAdminPort,
 					StatusPort:         statusPort,
 					ApplicationPorts:   parsedPorts,
@@ -620,5 +628,21 @@ func main() {
 	if err := rootCmd.Execute(); err != nil {
 		log.Errora(err)
 		os.Exit(-1)
+	}
+}
+
+// isIPv6Addr check the string and returns true for a valid IPv6 address
+// for all other cases it returns false
+func isIPv6Addr(proxyAddr string) bool {
+	addr := net.ParseIP(proxyAddr)
+	if addr != nil && addr.To4() != nil {
+		// Valid IPv4 address
+		return false
+	} else if addr != nil && addr.To4() == nil {
+		// Valid IPv6 address
+		return true
+	} else {
+		// In any other cases return as it were IPv4
+		return false
 	}
 }
